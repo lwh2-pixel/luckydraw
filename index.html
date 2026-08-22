@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>中秋晚會抽獎顯示（離線版•上限+一鍵抽獎+範圍+展示時間）</title>
+<style>
+  :root{
+    --bg:#0b1020; --panel:#141a2f; --accent:#39d98a; --accent2:#6ea8fe;
+    --danger:#ff5d6c; --warn:#ffb020; --text:#e6ebf5; --muted:#9aa5b1;
+    --gold:#ffd166; --silver:#cdd7e1; --bronze:#d29b6f; --diamond:#7ae1ff; --supdiamond:#ff90e8;
+  }
+  html,body{height:100%;margin:0}
+  body{
+    font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+    color:var(--text);display:flex;flex-direction:column;
+    background:var(--page-bg, linear-gradient(180deg,#0b1020,#0a0f1e));
+    background-size:cover;background-position:center;background-attachment:fixed;
+  }
+  header{
+    display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;justify-content:space-between;
+    padding:10px 16px;background:rgba(20,26,47,.86);backdrop-filter:saturate(120%) blur(6px);position:sticky;top:0;z-index:10;
+    box-shadow:0 2px 14px rgba(0,0,0,.35);
+  }
+  .left, .right {display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+  select, button, input{
+    background:#0f1530;color:var(--text);border:1px solid #273155;border-radius:8px;padding:.55rem .75rem;font-size:16px;
+  }
+  input[type="number"]{ width:7.5rem }
+  button.primary{background:linear-gradient(180deg,#1e2b6d,#152155);border-color:#2c3a7a}
+  button.danger{background:linear-gradient(180deg,#6d1e2a,#551521);border-color:#7a2c3a}
+  button.ghost{background:transparent;border-color:#33406c}
+  button:disabled{opacity:.6}
+  .pill{padding:.35rem .6rem;border-radius:999px;border:1px solid #2b355f;background:#0e1430;color:#cfe3ff;font-size:.9rem}
+  .status{font-variant-numeric:tabular-nums;letter-spacing:.3px}
+  .container{padding:12px 16px;display:flex;gap:12px;flex:1;min-height:0}
+  .col{background:rgba(20,26,47,.55);border:1px solid #273155;border-radius:14px;padding:12px 12px;display:flex;flex-direction:column;min-width:0}
+  .boards{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;flex:1;min-height:0}
+  @media (max-width:1100px){ .boards{grid-template-columns:repeat(3,1fr);} }
+  @media (max-width:700px){ .boards{grid-template-columns:repeat(2,1fr);} header{position:static} }
+  @media (max-width:480px){ .boards{grid-template-columns:1fr;} }
+  .board{display:flex;flex-direction:column;min-height:120px}
+  .board-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+  .title{font-weight:700;letter-spacing:.5px}
+  .badge{font-size:.85rem;padding:.2rem .5rem;border-radius:6px;border:1px solid #2b355f;background:#0e1430;color:#a9c1ff}
+  .grid{display:flex;flex-wrap:wrap;gap:8px;align-content:flex-start;overflow:auto;padding-bottom:6px;}
+  .grid.dense .cell  { min-width:78px; height:52px; font-size:1.45rem; }
+  .grid.xdense .cell { min-width:68px; height:46px; font-size:1.25rem; }
+  .grid.ultra .cell  { min-width:58px; height:40px; font-size:1.08rem; letter-spacing:.5px; }
+  .cell{
+    user-select:none;cursor:pointer;font-weight:800;font-variant-numeric:tabular-nums;
+    display:inline-flex;align-items:center;justify-content:center;
+    min-width:84px;height:56px;border-radius:10px;padding:0 10px;
+    border:1px solid #2a365f;background:linear-gradient(180deg,#11183a,#0c1330);
+    box-shadow:0 2px 8px rgba(0,0,0,.35), inset 0 0 0 1px rgba(255,255,255,.04);
+    font-size:1.6rem;letter-spacing:1px;color:#eaf2ff;position:relative;transition:transform .05s ease, background .2s ease, border-color .2s ease;
+  }
+  .cell:hover{transform:translateY(-1px)}
+  .cell:active{transform:translateY(0)}
+  .cell.marked{color:#fff;border-color:var(--danger);background:linear-gradient(180deg,#3a1120,#300c19)}
+  .cell.marked::after{content:"已領";position:absolute;top:4px;right:6px;font-size:.7rem;color:#ffdfe3;opacity:.85}
+  .cell.new{animation:pop .6s ease}
+  @keyframes pop{0%{transform:scale(0.4);opacity:0}60%{transform:scale(1.08);opacity:1}100%{transform:scale(1)}}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .muted{color:var(--muted)}
+  .inputline{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  #scanInput{min-width:220px}
+  .legend{display:flex;gap:8px;flex-wrap:wrap}
+  .legend .swatch{width:10px;height:10px;border-radius:2px;display:inline-block;margin-right:4px}
+  .legend .item{display:flex;align-items:center;gap:6px;color:#c7d3ea;font-size:.9rem}
+  .toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:#0d142e;border:1px solid #32406d;color:#eaf2ff;border-radius:10px;padding:.6rem .9rem;box-shadow:0 10px 30px rgba(0,0,0,.35);z-index:1000;display:none}
+  .bigflash{position:fixed;inset:0;background:radial-gradient(ellipse at center,rgba(255,255,255,.18),rgba(0,0,0,0) 70%);pointer-events:none;opacity:0;transition:opacity .35s ease}
+  .bigflash.show{opacity:1}
+  .hidden{display:none!important}
+  .section-title{margin:6px 0 2px;font-size:.95rem;color:#9fb1d8}
+  .t-sup{color:var(--supdiamond)} .t-dia{color:var(--diamond)} .t-gold{color:var(--gold)} .t-silver{color:var(--silver)} .t-bronze{color:var(--bronze)}
+  .quota{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .quota input{width:5rem;text-align:center}
+  .cap-badge{font-size:.8rem;opacity:.9}
+  .cap-reached{color:var(--warn)}
+
+  /* 儀式感：大字展示 */
+  .reveal-overlay{
+    position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:3000;
+    background:rgba(0,0,0,.72);backdrop-filter:blur(4px);
+  }
+  .reveal-overlay.show{display:flex;}
+  .reveal-box{
+    color:#fff; text-align:center; padding:18px 22px;
+    border-radius:18px; border:1px solid rgba(255,255,255,.18);
+    box-shadow:0 20px 80px rgba(0,0,0,.6), inset 0 0 0 1px rgba(255,255,255,.06);
+    background:radial-gradient(1200px 600px at 50% -10%, rgba(122,225,255,.18), rgba(255,255,255,0) 60%), rgba(7,10,26,.85);
+    max-width:min(92vw,880px);
+    width:clamp(280px, 70vw, 820px);
+    transform:scale(.9); opacity:0;
+    animation:revealIn .35s cubic-bezier(.2,.9,.2,1) forwards;
+  }
+  .reveal-tier{font-size:1rem;letter-spacing:3px;opacity:.85;margin-bottom:8px}
+  .reveal-code{
+    font-weight:900; letter-spacing:3px;
+    font-size:clamp(44px, 10vw, 120px);
+    line-height:1.05; text-shadow:0 10px 40px rgba(0,0,0,.6);
+  }
+  @keyframes revealIn{
+    0%{transform:scale(.9);opacity:0}
+    100%{transform:scale(1);opacity:1}
+  }
+
+  /* 抽獎範圍區 */
+  .range-box{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .range-box input[type="number"]{width:7rem}
+
+  /* 展示時間控制 */
+  .duration-box{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .duration-box input[type="number"]{width:6.5rem}
+</style>
+</head>
+<body>
+<header>
+  <div class="left">
+    <strong>中秋抽獎顯示（離線版）</strong>
+    <span class="pill status" id="status">待命</span>
+    <div class="legend">
+      <span class="item"><span class="swatch" style="background:var(--supdiamond)"></span>超級鑽石</span>
+      <span class="item"><span class="swatch" style="background:var(--diamond)"></span>鑽石</span>
+      <span class="item"><span class="swatch" style="background:var(--gold)"></span>金</span>
+      <span class="item"><span class="swatch" style="background:var(--silver)"></span>銀</span>
+      <span class="item"><span class="swatch" style="background:var(--bronze)"></span>銅</span>
+      <span class="item"><span class="swatch" style="background:#a93344"></span>紅色=已領</span>
+    </div>
+  </div>
+  <div class="right">
+    <div class="row">
+      <label class="muted">獎項</label>
+      <select id="tier">
+        <option value="sup">超級鑽石</option>
+        <option value="dia">鑽石</option>
+        <option value="gold">金</option>
+        <option value="silver">銀</option>
+        <option value="bronze">銅</option>
+      </select>
+      <span class="muted">快捷鍵 1–5（輸入框以外時）</span>
+    </div>
+    <div class="row inputline">
+      <input id="scanInput" autocomplete="off" placeholder="把游標放這裡，用掃描槍掃描或手動輸入6位數" />
+      <button id="btnDraw1" class="primary">抽1</button>
+      <button id="btnDraw5" class="primary">抽5</button>
+      <button id="btnDraw10" class="primary">抽10</button>
+      <div class="range-box">
+        <span class="muted">抽獎範圍</span>
+        <input id="rangeMin" type="number" min="0" max="999999" placeholder="最小" />
+        <span>–</span>
+        <input id="rangeMax" type="number" min="0" max="999999" placeholder="最大" />
+        <button id="btnSetRange" class="ghost">套用範圍</button>
+      </div>
+      <div class="duration-box">
+        <span class="muted">展示時間(秒)</span>
+        <input id="revealSec" type="number" min="0.3" max="10" step="0.1" placeholder="1.2" />
+      </div>
+      <button id="btnExport" class="ghost">匯出CSV</button>
+      <button id="btnClearTier" class="danger">清空當前獎項 (C)</button>
+      <button id="btnClearAll" class="danger">清空全部 (Alt+Shift+X)</button>
+      <input id="bgFile" type="file" accept="image/*" class="hidden" />
+      <button id="btnBg" class="ghost">上傳背景圖片</button>
+      <button id="btnBgRemove" class="ghost">移除背景</button>
+    </div>
+    <div class="row quota">
+      <span class="muted">名額上限：</span>
+      <label>超級鑽石 <input id="cap-sup" type="number" min="0" step="1" value="3"></label>
+      <label>鑽石 <input id="cap-dia" type="number" min="0" step="1" value="10"></label>
+      <label>金 <input id="cap-gold" type="number" min="0" step="1" value="20"></label>
+      <label>銀 <input id="cap-silver" type="number" min="0" step="1" value="30"></label>
+      <label>銅 <input id="cap-bronze" type="number" min="0" step="1" value="50"></label>
+      <span class="muted">（0 表示不限制）</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <div class="boards col">
+    <div class="board" data-tier="sup">
+      <div class="board-header">
+        <div class="title t-sup">超級鑽石獎</div>
+        <div>
+          <span class="badge" id="count-sup">0</span>
+          <span class="badge cap-badge" id="capbadge-sup"></span>
+        </div>
+      </div>
+      <div class="grid" id="grid-sup" aria-label="超級鑽石"></div>
+    </div>
+
+    <div class="board" data-tier="dia">
+      <div class="board-header">
+        <div class="title t-dia">鑽石獎</div>
+        <div>
+          <span class="badge" id="count-dia">0</span>
+          <span class="badge cap-badge" id="capbadge-dia"></span>
+        </div>
+      </div>
+      <div class="grid" id="grid-dia" aria-label="鑽石"></div>
+    </div>
+
+    <div class="board" data-tier="gold">
+      <div class="board-header">
+        <div class="title t-gold">金獎</div>
+        <div>
+          <span class="badge" id="count-gold">0</span>
+          <span class="badge cap-badge" id="capbadge-gold"></span>
+        </div>
+      </div>
+      <div class="grid" id="grid-gold" aria-label="金"></div>
+    </div>
+
+    <div class="board" data-tier="silver">
+      <div class="board-header">
+        <div class="title t-silver">銀獎</div>
+        <div>
+          <span class="badge" id="count-silver">0</span>
+          <span class="badge cap-badge" id="capbadge-silver"></span>
+        </div>
+      </div>
+      <div class="grid" id="grid-silver" aria-label="銀"></div>
+    </div>
+
+    <div class="board" data-tier="bronze">
+      <div class="board-header">
+        <div class="title t-bronze">銅獎</div>
+        <div>
+          <span class="badge" id="count-bronze">0</span>
+          <span class="badge cap-badge" id="capbadge-bronze"></span>
+        </div>
+      </div>
+      <div class="grid" id="grid-bronze" aria-label="銅"></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="bigflash" id="flash"></div>
+
+<!-- 儀式感展示區 -->
+<div id="reveal" class="reveal-overlay" aria-hidden="true">
+  <div class="reveal-box">
+    <div id="revealTier" class="reveal-tier">鑽石獎</div>
+    <div id="revealCode" class="reveal-code">000000</div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const state = {
+    data: { sup:[], dia:[], gold:[], silver:[], bronze:[] }, // {code, marked, ts}
+    history: [],
+    currentTier: 'sup',
+    settings: {
+      sound:true, animation:true,
+      uniqueAcrossTiers:true,
+      autoEnter:true
+    },
+    caps: { sup:3, dia:10, gold:20, silver:30, bronze:50 }, // 0 表示不限制
+    bg: null, // dataURL
+    range: { min: 0, max: 999999 }, // 抽獎候選範圍（含）
+    revealMs: 1200 // 儀式感展示時間（毫秒）
+  };
+
+  const els = {
+    tier: $('#tier'),
+    input: $('#scanInput'),
+    grids: {
+      sup: $('#grid-sup'), dia: $('#grid-dia'), gold: $('#grid-gold'),
+      silver: $('#grid-silver'), bronze: $('#grid-bronze')
+    },
+    counts: {
+      sup: $('#count-sup'), dia: $('#count-dia'), gold: $('#count-gold'),
+      silver: $('#count-silver'), bronze: $('#count-bronze')
+    },
+    capInputs: {
+      sup: $('#cap-sup'), dia: $('#cap-dia'), gold: $('#cap-gold'),
+      silver: $('#cap-silver'), bronze: $('#cap-bronze')
+    },
+    capBadges: {
+      sup: $('#capbadge-sup'), dia: $('#capbadge-dia'), gold: $('#capbadge-gold'),
+      silver: $('#capbadge-silver'), bronze: $('#capbadge-bronze')
+    },
+    toast: $('#toast'), flash: $('#flash'),
+    btnExport: $('#btnExport'),
+    btnClearTier: $('#btnClearTier'), btnClearAll: $('#btnClearAll'),
+    btnBg: $('#btnBg'), btnBgRemove: $('#btnBgRemove'), bgFile: $('#bgFile'),
+    btnDraw1: $('#btnDraw1'), btnDraw5: $('#btnDraw5'), btnDraw10: $('#btnDraw10'),
+    status: $('#status'),
+    reveal: $('#reveal'), revealTier: $('#revealTier'), revealCode: $('#revealCode'),
+    rangeMin: $('#rangeMin'), rangeMax: $('#rangeMax'), btnSetRange: $('#btnSetRange'),
+    revealSec: $('#revealSec')
+  };
+
+  // 初始化
+  loadFromStorage();
+  syncCapInputs();
+  syncRangeInputs();
+  syncRevealInput();
+  applyBackground();
+  renderAll();
+  focusInput();
+  updateStatus('待命');
+
+  // 名額上限變更
+  Object.entries(els.capInputs).forEach(([tier, inputEl])=>{
+    inputEl.addEventListener('change', ()=>{
+      const v = Math.max(0, parseInt(inputEl.value||'0', 10) || 0);
+      state.caps[tier] = v;
+      inputEl.value = String(v);
+      saveToStorage();
+      updateCounts();
+      if(v>0 && state.data[tier].length >= v){
+        showToast(`${tierName(tier)} 已達上限 ${v}`);
+      }
+    });
+  });
+
+  // 範圍設定
+  els.btnSetRange.addEventListener('click', ()=>{
+    let min = toInt(els.rangeMin.value, 0);
+    let max = toInt(els.rangeMax.value, 999999);
+    if(min < 0) min = 0;
+    if(max > 999999) max = 999999;
+    if(min > max){ const t=min; min=max; max=t; }
+    state.range.min = min;
+    state.range.max = max;
+    saveToStorage();
+    syncRangeInputs();
+    showToast(`已套用範圍：${pad6(min)}–${pad6(max)}`);
+  });
+
+  function syncRangeInputs(){
+    els.rangeMin.value = state.range.min;
+    els.rangeMax.value = state.range.max;
+  }
+
+  // 展示時間設定（秒）
+  els.revealSec.addEventListener('change', ()=>{
+    let sec = parseFloat(String(els.revealSec.value||'').trim());
+    if(!Number.isFinite(sec)) sec = 1.2;
+    sec = Math.max(0.3, Math.min(10, sec));
+    state.revealMs = Math.round(sec * 1000);
+    els.revealSec.value = (state.revealMs/1000).toFixed(1);
+    saveToStorage();
+    showToast(`展示時間已設定為 ${els.revealSec.value} 秒`);
+  });
+  function syncRevealInput(){
+    els.revealSec.value = (state.revealMs/1000).toFixed(1);
+  }
+
+  // 切換獎項
+  els.tier.addEventListener('change', e=>{
+    state.currentTier = e.target.value;
+    focusInput();
+    showToast('已切換獎項：' + tierName(state.currentTier));
+  });
+
+  // 背景：上傳/移除
+  els.btnBg.addEventListener('click', ()=> els.bgFile.click());
+  els.bgFile.addEventListener('change', async (e)=>{
+    const file = e.target.files?.[0];
+    if(!file) return;
+    if(!/^image\//.test(file.type)){ showToast('請選擇圖片檔'); return; }
+    const dataUrl = await fileToDataURL(file);
+    const optimized = await downscaleImage(dataUrl, 3000);
+    state.bg = optimized;
+    saveToStorage();
+    applyBackground();
+    showToast('背景已更新');
+    e.target.value = '';
+  });
+  els.btnBgRemove.addEventListener('click', ()=>{
+    if(!state.bg){ showToast('目前使用預設背景'); return; }
+    if(!confirm('要移除自訂背景並恢復預設嗎？')) return;
+    state.bg = null;
+    saveToStorage();
+    applyBackground();
+    showToast('已移除背景');
+  });
+
+  // 一鍵抽獎
+  let drawing = false;
+  els.btnDraw1.addEventListener('click', ()=> startDraw(1));
+  els.btnDraw5.addEventListener('click', ()=> startDraw(5));
+  els.btnDraw10.addEventListener('click', ()=> startDraw(10));
+
+  async function startDraw(count){
+    if(drawing) return;
+    const tier = state.currentTier;
+    const cap = state.caps[tier] || 0;
+    const current = state.data[tier].length;
+
+    const room = cap>0 ? Math.max(0, cap - current) : count;
+    if(cap>0 && room<=0){
+      showToast(`${tierName(tier)} 名額已滿（上限 ${cap}）`);
+      warnCap(tier);
+      return;
+    }
+
+    // 構建此時仍可抽的候選集合（依範圍與是否跨獎唯一）
+    const used = new Set();
+    for(const list of Object.values(state.data)){ for(const it of list){ used.add(it.code); } }
+
+    const candidates = [];
+    for(let n=state.range.min; n<=state.range.max; n++){
+      const code = pad6(n);
+      if(state.settings.uniqueAcrossTiers){
+        if(!used.has(code)) candidates.push(code);
+      }else{
+        if(!state.data[tier].some(x=>x.code===code)) candidates.push(code);
+      }
+      if(candidates.length > 200000) break; // 安全上限，避免記憶體暴衝
+    }
+
+    if(candidates.length===0){
+      showToast('範圍內沒有可抽的號碼（可能已全抽完）');
+      return;
+    }
+
+    const canDraw = Math.min(count, cap>0 ? Math.max(0, cap - current) : count, candidates.length);
+
+    drawing = true;
+    disableDrawButtons(true);
+    shuffleInPlace(candidates);
+
+    try{
+      for(let i=0;i<canDraw;i++){
+        const code = candidates[i];
+        await revealOnce(tier, code);
+        addNumberToTier(tier, code);
+        await wait(150);
+      }
+    } finally {
+      drawing = false;
+      disableDrawButtons(false);
+    }
+  }
+
+  function disableDrawButtons(disabled){
+    els.btnDraw1.disabled = els.btnDraw5.disabled = els.btnDraw10.disabled = disabled;
+  }
+
+  // Fisher–Yates 洗牌
+  function shuffleInPlace(arr){
+    for(let i=arr.length-1;i>0;i--){
+      const j = Math.floor(Math.random()*(i+1));
+      [arr[i],arr[j]] = [arr[j],arr[i]];
+    }
+  }
+
+  async function revealOnce(tier, code){
+    els.revealTier.textContent = tierName(tier);
+    els.revealCode.textContent = code;
+    els.reveal.classList.add('show');
+    playRevealSound();
+    await wait(state.revealMs);
+    els.reveal.classList.remove('show');
+  }
+
+  function addNumberToTier(tier, code){
+    const cap = state.caps[tier] || 0;
+    if(cap>0 && state.data[tier].length >= cap){
+      showToast(`${tierName(tier)} 名額已滿（上限 ${cap}）`);
+      warnCap(tier);
+      return;
+    }
+    if(state.settings.uniqueAcrossTiers && existsAnywhere(code)){ showToast(`號碼 ${code} 已在其他獎項出現`); return; }
+    if(state.data[tier].some(x=>x.code===code)){ showToast(`此獎項已包含 ${code}`); blinkCell(tier, code); return; }
+
+    const item = {code, marked:false, ts:Date.now()};
+    state.data[tier].push(item);
+    state.history.push({op:'add', tier, code});
+    saveToStorage();
+    addCellToGrid(tier, item, true);
+    updateCounts();
+    flash(); playSound();
+    updateStatus(`已加入 ${tierName(tier)}：${code}`);
+  }
+
+  // 鍵盤快捷鍵
+  document.addEventListener('keydown', e=>{
+    const isTyping = document.activeElement === els.input
+      || document.activeElement === els.rangeMin
+      || document.activeElement === els.rangeMax
+      || document.activeElement === els.revealSec;
+
+    if(!isTyping && !e.ctrlKey && !e.metaKey && !e.shiftKey){
+      if(e.key==='1') setTier('sup');
+      if(e.key==='2') setTier('dia');
+      if(e.key==='3') setTier('gold');
+      if(e.key==='4') setTier('silver');
+      if(e.key==='5') setTier('bronze');
+    }
+    if(e.key==='Backspace'){ e.preventDefault(); undoLast(); }
+    if(e.key===' '){ e.preventDefault(); flash(); playSound(); }
+    if((e.ctrlKey || e.metaKey) && e.key.toLowerCase()==='s'){ e.preventDefault(); exportCSV(); }
+    if(!e.ctrlKey && !e.metaKey && (e.key.toLowerCase()==='c')){
+      if(isTyping) return;
+      clearCurrentTier();
+    }
+    if(e.altKey && e.shiftKey && e.key.toLowerCase()==='x'){ e.preventDefault(); clearAll(); }
+    if(e.key==='Delete'){
+      const focusCell = document.activeElement?.classList?.contains('cell') ? document.activeElement : null;
+      if(focusCell){
+        const code = focusCell.dataset.code, tier = focusCell.dataset.tier;
+        removeCode(tier, code);
+      }
+    }
+  });
+
+  // 手動輸入
+  els.input.addEventListener('keydown', e=>{
+    if(e.key==='Enter'){
+      const raw = els.input.value.trim();
+      handleCode(raw);
+      els.input.value = '';
+    }
+  });
+
+  // 匯出與清空
+  els.btnExport.addEventListener('click', exportCSV);
+  els.btnClearTier.addEventListener('click', clearCurrentTier);
+  els.btnClearAll.addEventListener('click', clearAll);
+
+  // cell 事件
+  let pressTimer=null;
+  function attachCellEvents(el){
+    el.addEventListener('click', ()=>{
+      toggleMark(el.dataset.tier, el.dataset.code);
+      el.focus();
+    });
+    el.addEventListener('keydown', (e)=>{
+      if(e.key==='Enter' || e.key===' '){
+        e.preventDefault();
+        toggleMark(el.dataset.tier, el.dataset.code);
+      }
+    });
+    el.addEventListener('mousedown', ()=>{
+      clearTimeout(pressTimer);
+      pressTimer = setTimeout(()=>{ removeCode(el.dataset.tier, el.dataset.code); }, 950);
+    });
+    ['mouseup','mouseleave'].forEach(evt=>el.addEventListener(evt, ()=>clearTimeout(pressTimer)));
+  }
+
+  // 手動新增號碼
+  function handleCode(raw){
+    if(!raw) return;
+    const code = normalizeCode(raw);
+    if(!/^[0-9]{6}$/.test(code)){ showToast('格式錯誤：請輸入6位數字（含前導零）'); return; }
+    // 範圍提醒（不強制）
+    const n = parseInt(code, 10);
+    if(n < state.range.min || n > state.range.max){
+      showToast(`提醒：${code} 不在目前範圍 ${pad6(state.range.min)}–${pad6(state.range.max)} 內`);
+    }
+    addNumberToTier(state.currentTier, code);
+  }
+
+  function warnCap(tier){
+    const badge = els.capBadges[tier];
+    if(!badge) return;
+    badge.classList.add('cap-reached');
+    setTimeout(()=>badge.classList.remove('cap-reached'), 1200);
+    try{
+      const ctx = new (window.AudioContext||window.webkitAudioContext)();
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type='sine'; o.frequency.value=220;
+      g.gain.value=0.0001; o.connect(g).connect(ctx.destination);
+      const now = ctx.currentTime;
+      g.gain.exponentialRampToValueAtTime(0.25, now+0.01);
+      o.start(); g.gain.exponentialRampToValueAtTime(0.00001, now+0.25); o.stop(now+0.26);
+    }catch(e){}
+  }
+
+  function normalizeCode(s){
+    s = String(s||'').replace(/\s+/g,'').replace(/[^\d]/g,'');
+    if(s.length===6) return s;
+    if(s.length>6) return s.slice(-6);
+    return s.padStart(6,'0');
+  }
+  const pad6 = n => String(Math.max(0, Math.min(999999, n|0))).padStart(6,'0');
+  const toInt = (v, def=0)=> {
+    const n = parseInt(String(v||'').trim(), 10);
+    return Number.isFinite(n) ? n : def;
+  }
+
+  function tierName(t){ return {sup:'超級鑽石', dia:'鑽石', gold:'金', silver:'銀', bronze:'銅'}[t] || t; }
+
+  function addCellToGrid(tier, item, isNew=false){
+    const grid = els.grids[tier];
+    const el = document.createElement('button');
+    el.type='button';
+    el.className='cell' + (isNew?' new':'') + (item.marked?' marked':'');
+    el.textContent=item.code;
+    el.dataset.code=item.code;
+    el.dataset.tier=tier;
+    el.setAttribute('tabindex','0');
+    attachCellEvents(el);
+    grid.appendChild(el);
+    grid.scrollTop = grid.scrollHeight;
+  }
+
+  function blinkCell(tier, code){
+    const grid = els.grids[tier];
+    const el = grid.querySelector(`.cell[data-code="${code}"]`);
+    if(!el) return;
+    el.style.outline='2px solid var(--warn)';
+    setTimeout(()=>el.style.outline='none', 600);
+  }
+
+  function toggleMark(tier, code){
+    const arr = state.data[tier];
+    const it = arr.find(x=>x.code===code);
+    if(!it) return;
+    it.marked = !it.marked;
+    state.history.push({op:'mark', tier, code});
+    saveToStorage();
+    const grid = els.grids[tier];
+    const el = grid.querySelector(`.cell[data-code="${code}"]`);
+    if(el){ el.classList.toggle('marked', it.marked); }
+  }
+
+  function removeCode(tier, code){
+    const arr = state.data[tier];
+    const idx = arr.findIndex(x=>x.code===code);
+    if(idx<0) return;
+    arr.splice(idx,1);
+    state.history.push({op:'remove', tier, code});
+    saveToStorage();
+    const grid = els.grids[tier];
+    const el = grid.querySelector(`.cell[data-code="${code}"]`);
+    if(el){ el.remove(); }
+    updateCounts();
+    showToast(`已移除 ${tierName(tier)}：${code}`);
+  }
+
+  function existsAnywhere(code){
+    return Object.values(state.data).some(list=>list.some(x=>x.code===code));
+  }
+
+  function renderAll(){
+    for(const t of Object.keys(state.data)){
+      const grid = els.grids[t];
+      grid.innerHTML='';
+      state.data[t].forEach(item=>addCellToGrid(t,item,false));
+    }
+    updateCounts();
+    els.tier.value = state.currentTier;
+  }
+
+  function updateCounts(){
+    for(const t of Object.keys(state.data)){
+      els.counts[t].textContent = state.data[t].length;
+      const cap = state.caps[t] || 0;
+      const badge = els.capBadges[t];
+      badge.textContent = cap>0 ? `上限 ${cap}` : '不限';
+      badge.classList.toggle('cap-reached', cap>0 && state.data[t].length >= cap);
+      applyDensity(t);
+    }
+  }
+
+  function applyDensity(t){
+    const n = state.data[t].length, g = els.grids[t];
+    g.classList.remove('dense','xdense','ultra');
+    if(n >= 40) g.classList.add('ultra');
+    else if(n >= 30) g.classList.add('xdense');
+    else if(n >= 20) g.classList.add('dense');
+  }
+
+  function undoLast(){
+    const last = state.history.pop();
+    if(!last){ showToast('無可撤回的操作'); return; }
+    if(last.op==='add'){
+      removeCode(last.tier, last.code);
+      state.history.pop();
+      showToast('已撤回上一筆新增');
+    }else if(last.op==='remove'){
+      const rec = {code:last.code, marked:false, ts:Date.now()};
+      state.data[last.tier].push(rec);
+      saveToStorage();
+      addCellToGrid(last.tier, rec, false);
+      updateCounts();
+      showToast('已恢復剛剛刪除的號碼');
+    }else if(last.op==='mark'){
+      toggleMark(last.tier, last.code);
+      state.history.pop();
+      showToast('已還原標記狀態');
+    }
+  }
+
+  function saveToStorage(){
+    const payload = {
+      data:state.data, currentTier:state.currentTier, caps:state.caps, bg:state.bg,
+      range: state.range, revealMs: state.revealMs
+    };
+    localStorage.setItem('luckydraw-v5', JSON.stringify(payload));
+  }
+  function loadFromStorage(){
+    try{
+      const raw = localStorage.getItem('luckydraw-v5')
+        || localStorage.getItem('luckydraw-v4')
+        || localStorage.getItem('luckydraw-v3')
+        || localStorage.getItem('luckydraw-v2')
+        || localStorage.getItem('luckydraw-v1');
+      if(!raw) return;
+      const obj = JSON.parse(raw);
+      if(obj && obj.data){
+        state.data = obj.data;
+        state.currentTier = obj.currentTier || 'sup';
+        if(obj.caps) state.caps = Object.assign({ sup:3, dia:10, gold:20, silver:30, bronze:50 }, obj.caps);
+        if(obj.bg) state.bg = obj.bg;
+        if(obj.range){
+          state.range.min = toInt(obj.range.min, 0);
+          state.range.max = toInt(obj.range.max, 999999);
+        }
+        if(obj.revealMs && Number.isFinite(obj.revealMs)) state.revealMs = Math.max(300, Math.min(10000, obj.revealMs|0));
+      }
+    }catch(e){}
+  }
+  function syncCapInputs(){
+    for(const t of Object.keys(state.caps)){
+      els.capInputs[t].value = state.caps[t];
+    }
+  }
+
+  function applyBackground(){
+    if(state.bg){
+      document.body.style.setProperty('--page-bg', `url("${state.bg}")`);
+    }else{
+      document.body.style.setProperty('--page-bg', 'linear-gradient(180deg,#0b1020,#0a0f1e)');
+    }
+  }
+
+  function focusInput(){ setTimeout(()=>{ els.input.focus(); els.input.select(); }, 50); }
+
+  function showToast(msg){
+    els.toast.textContent = msg;
+    els.toast.style.display='block';
+    clearTimeout(showToast.t);
+    showToast.t = setTimeout(()=>els.toast.style.display='none', 1800);
+  }
+
+  function flash(){
+    if(!state.settings.animation) return;
+    els.flash.classList.add('show');
+    setTimeout(()=>els.flash.classList.remove('show'), 280);
+  }
+
+  function playSound(){
+    if(!state.settings.sound) return;
+    try{
+      const ctx = new (window.AudioContext||window.webkitAudioContext)();
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type='triangle'; o.frequency.value=660;
+      g.gain.value=0.001;
+      o.connect(g).connect(ctx.destination);
+      const now = ctx.currentTime;
+      g.gain.exponentialRampToValueAtTime(0.3, now+0.01);
+      o.start();
+      o.frequency.exponentialRampToValueAtTime(990, now+0.08);
+      g.gain.exponentialRampToValueAtTime(0.00001, now+0.25);
+      o.stop(now+0.26);
+    }catch(e){}
+  }
+
+  // 儀式感音效
+  function playRevealSound(){
+    if(!state.settings.sound) return;
+    try{
+      const ctx = new (window.AudioContext||window.webkitAudioContext)();
+      const g = ctx.createGain(); g.connect(ctx.destination); g.gain.value=0.001;
+      const o1 = ctx.createOscillator(); o1.type='sawtooth'; o1.frequency.value=220; o1.connect(g);
+      const o2 = ctx.createOscillator(); o2.type='square'; o2.frequency.value=440; o2.connect(g);
+      const now = ctx.currentTime;
+      g.gain.exponentialRampToValueAtTime(0.25, now+0.02);
+      o1.start(); o2.start();
+      o2.frequency.exponentialRampToValueAtTime(660, now+0.4);
+      g.gain.exponentialRampToValueAtTime(0.00001, now+0.6);
+      o1.stop(now+0.62); o2.stop(now+0.62);
+    }catch(e){}
+  }
+
+  function exportCSV(){
+    const rows = [['獎項','號碼','已領','時間']];
+    const fmt = ts=> new Date(ts).toLocaleString();
+    for(const [tier,list] of Object.entries(state.data)){
+      for(const item of list){
+        rows.push([tierName(tier), item.code, item.marked?'是':'否', fmt(item.ts)]);
+      }
+    }
+    const csv = rows.map(r=>r.map(s=>`"${String(s).replace(/"/g,'""')}"`).join(',')).join('\r\n');
+    const BOM = '\uFEFF';
+    const blob = new Blob([BOM, csv], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = '中秋抽獎中獎清單.csv';
+    a.click();
+  }
+
+  function clearCurrentTier(){
+    const t = state.currentTier;
+    if(!confirm(`確定要清空「${tierName(t)}」所有號碼嗎？`)) return;
+    state.data[t] = [];
+    saveToStorage();
+    renderAll();
+    showToast(`已清空 ${tierName(t)}`);
+  }
+
+  function clearAll(){
+    if(!confirm('確定清空全部獎項的中獎名單？此動作無法復原。')) return;
+    for(const t of Object.keys(state.data)){ state.data[t] = []; }
+    state.history = [];
+    saveToStorage();
+    renderAll();
+    showToast('已清空全部名單');
+  }
+
+  // 小工具
+  function $(q){ return document.querySelector(q); }
+  function setTier(t){ state.currentTier = t; els.tier.value = t; showToast('已切換：' + tierName(t)); focusInput(); }
+  function updateStatus(msg){ els.status.textContent = msg; }
+  function fileToDataURL(file){
+    return new Promise((res,rej)=>{
+      const r = new FileReader();
+      r.onload = ()=>res(r.result);
+      r.onerror = rej;
+      r.readAsDataURL(file);
+    });
+  }
+  function downscaleImage(dataUrl, maxW){
+    return new Promise((resolve)=>{
+      const img = new Image();
+      img.onload = ()=>{
+        const scale = Math.min(1, maxW / Math.max(img.width, img.height));
+        if(scale >= 1){ resolve(dataUrl); return; }
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.92));
+      };
+      img.src = dataUrl;
+    });
+  }
+  const wait = (ms)=> new Promise(res=> setTimeout(res, ms));
+
+})();
+</script>
+</body>
+</html>
